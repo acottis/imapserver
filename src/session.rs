@@ -1,8 +1,6 @@
-use std::io::{Read};
-use std::fs;
-use chrono::{DateTime, Utc};
 use crate::error::{Result, Error};
 use crate::email::Email;
+use std::fs;
 
 static MAIL_ROOT: &'static str = "D:/MAILSERVER";
 
@@ -79,24 +77,17 @@ impl UserSession{
         }
         Ok(folders)
     }
-    /// Takes the creation date of the file as the creation date and converts to an IMAP friendly format [String]
-    /// 
-    fn internal_date(&self, path: impl AsRef<std::path::Path>) -> Result<String> {
-        let metadata = fs::metadata(path).map_err(Error::IO)?;
-        let created_date = metadata.created().map_err(Error::IO)?;
-        let dt: DateTime<Utc> = created_date.into();
-        Ok(dt.format("%Y-%b-%d %H:%M:%S %z").to_string())
-    }
     /// Fetch (Non UID version)
     /// 
-    pub fn fetch_seq(&self, msg: &str) -> Result<Vec<Email>>{
+    pub fn fetch_seq(&self, msg: &str) -> Result<Vec<String>>{
         // Holding Vector for result
-        let mut responses: Vec<Email> = Vec::new();
+        let mut emails: Vec<Email> = Vec::new();
+        let mut responses: Vec<String> = Vec::new();
 
         // Split it into two parts, sequence number(s) and args
         let mut split = msg.splitn(2, " ");
         let seq = split.next().unwrap();
-        let args = split.next();
+        let args = split.next().unwrap();
 
         // Get the files in the Inbox
         let path = format!("{}/mail/{}/Inbox", MAIL_ROOT, self.username.as_ref().unwrap());
@@ -104,21 +95,21 @@ impl UserSession{
 
         if seq.contains(",") {
             // Look up Vector
-            responses.append(&mut self.fetch_list(seq, dir).unwrap());
+            emails.append(&mut self.fetch_list(seq, dir).unwrap());
         }
         else if seq.contains(":") {
             // Lookup Range
-            responses.append(&mut self.fetch_range(seq, dir).unwrap());
+            emails.append(&mut self.fetch_range(seq, dir).unwrap());
         }
         else{
             // Lookup one thing
-            responses.push(self.fetch_one(seq, dir).unwrap());
+            emails.push(self.fetch_one(seq, dir).unwrap());
         }
-
-        match args{
-            _ => {}
-        };
-
+            // Formate the
+        for email in emails{
+            responses.push(email.format_response(args))
+        }
+        
         // Parse Args
         Ok(responses)
     }
@@ -181,12 +172,6 @@ impl UserSession{
     }
 }
 
-#[test]
-fn test_internal_date(){
-    let session = UserSession::new();
-    let date = session.internal_date("test_emails/NoDisplayNames.eml").unwrap();
-    assert_eq!(date, "2021-Nov-23 11:26:52 +0000");
-}
 #[test]
 fn fetch_seq_single(){
     let mut session = UserSession::new();

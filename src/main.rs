@@ -137,8 +137,7 @@ fn imap_main(stream: TcpStream) -> Result<()> {
                 // Client asking for full message
                 let responses = session.fetch_seq(&msg).unwrap();
                 for response in responses{
-                    todo!();
-                    stream.write(None, Response::None, "".into())?;
+                    stream.write(None, Response::None, response)?;
                 }
                 stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?; 
                 // // Wants a UID lookup
