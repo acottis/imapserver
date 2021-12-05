@@ -1,4 +1,4 @@
-use super::*;
+use crate::parse_email::ParseEmail;
 #[test]
 fn email_parse_from_no_displaynames(){
     let parser = ParseEmail::new("test_emails/NoDisplayNames.eml").unwrap();
@@ -43,12 +43,4 @@ fn email_parse_subject(){
     let parser = ParseEmail::new("test_emails/NoDisplayNames.eml").unwrap();
     let subject = parser.subject_header().unwrap();
     assert_eq!(subject, "Testing Email");
-}
-
-
-#[test]
-fn test_internal_date(){
-
-    let date = internal_date("test_emails/NoDisplayNames.eml").unwrap();
-    assert_eq!(date, "2021-Nov-23 11:26:52 +0000");
 }
