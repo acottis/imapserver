@@ -1,11 +1,16 @@
 use std::net::{TcpListener, TcpStream};
-use std::io::{BufReader, Read};
-use std::io::{Write, BufRead};
+use std::io::{Read};
 use std::fs::metadata;
 use chrono::{DateTime, Utc};
 //use native_tls::{Identity, TlsAcceptor, Tls}
 
-pub mod error;
+mod stream;
+use stream::Stream;
+
+mod types;
+use types::{Command, Response};
+
+mod error;
 use error::{Result, Error};
 
 mod parse_email;
@@ -16,67 +21,6 @@ mod test;
 
 static BIND_ADDRESS: &str = "0.0.0.0:143";
 static MAX_BAD_ATTEMPTS: u8 = 3;
-
-#[allow(dead_code)]
-#[derive(PartialEq)]
-enum Response{
-    Continuation,
-    Ok,
-    No,
-    Bad,
-    None,
-}
-
-impl std::fmt::Display for Response{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result{
-        let s = match self{
-            Response::Ok => "OK",
-            Response::Bad => "BAD",
-            Response::Continuation => "+",
-            Response::No => "NO",
-            Response::None => "",
-        };
-        write!(f, "{}", s)
-    }
-}
-
-#[derive(Debug)]
-enum Command{
-    Capability,
-    Authenticate,
-    Fetch,
-    Unrecognised,
-    Login,
-    List,
-    Select,
-    Status,
-    Logout,
-    Noop,
-    Subscribe,
-    Uid,
-    Create,
-}
-
-impl From<String> for Command{
-    fn from(s: String) -> Self {
-        let cmd = s.to_uppercase();
-        match cmd.as_str() {
-            "CAPABILITY" => Command::Capability,
-            "AUTHENTICATE" => Command::Authenticate,
-            "FETCH" => Command::Fetch,
-            "LOGIN" => Command::Login,
-            "LIST" => Command::List,
-            "SELECT" => Command::Select,
-            "STATUS" => Command::Status,
-            "SUBSCRIBE" => Command::Subscribe,
-            "NOOP" => Command::Noop,
-            "LOGOUT" => Command::Logout,
-            "UID" => Command::Uid,
-            "CREATE" => Command::Create,
-            _ => Command::Unrecognised,
-        }   
-    }
-}
 
 #[derive(Debug)]
 struct UserSession{
@@ -127,6 +71,8 @@ fn listen() -> Result<()> {
             Ok(s) => {
                 std::thread::spawn(|| -> Result<()> {
                     println!("Recieved connection from: {}", &s.peer_addr().map_err(Error::IO)?);
+                    s.set_read_timeout(Some(std::time::Duration::from_secs(120))).unwrap();
+                    s.set_write_timeout(Some(std::time::Duration::from_secs(15))).unwrap();
                     imap_main(s)?;
                     Ok(())
                 });
@@ -153,6 +99,8 @@ fn parse_response(res: String) -> Result<(Command, Option<String>, String)>{
 /// 
 fn imap_main(stream: TcpStream) -> Result<()> {
 
+    let mut stream: Stream = Stream::new(stream);
+
     let mut session = UserSession{
         email: None,
         username: None,
@@ -161,21 +109,21 @@ fn imap_main(stream: TcpStream) -> Result<()> {
         bad_attempts: 0,
     };
 
-    write(&stream, None, Response::Ok, "IMAP4 Service Ready.\r\n".into())?;
+    stream.write(None, Response::Ok, "IMAP4 Service Ready.\r\n".into())?;
 
     loop{
         std::thread::sleep(std::time::Duration::from_millis(500));
-        let res = read(&stream)?;
+        let res = stream.read()?;
         let (cmd, tag, msg) = parse_response(res)?;
         //println!("CMD: {:?}, TAG: {:?}, MSG: {}", cmd, tag, msg);
 
         match cmd {
             Command::Capability => {
-                write(&stream, None, Response::None, "CAPABILITY IMAP4 IMAP4rev1 AUTH=PLAIN\r\n".into())?;
-                write(&stream, tag, Response::Ok, "CAPABILITY completed.\r\n".into())?;
+                stream.write(None, Response::None, "CAPABILITY IMAP4 IMAP4rev1 AUTH=PLAIN\r\n".into())?;
+                stream.write(tag, Response::Ok, "CAPABILITY completed.\r\n".into())?;
             }
             Command::Noop => {
-                write(&stream, tag, Response::Ok, "NOOP COMPLETED\r\n".into())?;
+                stream.write(tag, Response::Ok, "NOOP COMPLETED\r\n".into())?;
             }
             Command::Authenticate => {
                 todo!();
@@ -184,105 +132,105 @@ fn imap_main(stream: TcpStream) -> Result<()> {
                 session.authenticate(msg.to_owned());
                 println!("{:?}", session);
                 if session.authenticated {
-                    write(&stream, tag, Response::Ok, "LOGIN completed.\r\n".into())?;
+                    stream.write(tag, Response::Ok, "LOGIN completed.\r\n".into())?;
                     session.count_emails()?;
                 }else{
-                    write(&stream, tag, Response::Bad, "LOGIN failed.\r\n".into())?;
+                    stream.write(tag, Response::Bad, "LOGIN failed.\r\n".into())?;
                 }
             }
             Command::List => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
                 println!("{}", msg);
                 if msg == "\"\" \"\""{
-                    write(&stream, None, Response::None, "LIST (\\Noselect \\HasChildren) \"/\" \"\"\r\n".into())?;  
-                    write(&stream, tag, Response::Ok, "LIST completed.\r\n".into())?;
+                    stream.write(None, Response::None, "LIST (\\Noselect \\HasChildren) \"/\" \"\"\r\n".into())?;  
+                    stream.write(tag, Response::Ok, "LIST completed.\r\n".into())?;
                 }else if msg == "\"\" \"*\""{       
-                    write(&stream, None, Response::None, "LIST (\\Marked \\HasNoChildren) \"/\" Inbox\r\n".into())?;
-                    write(&stream, None, Response::None, "LIST (\\HasNoChildren \\Drafts) \"/\" Drafts\r\n".into())?;
-                    write(&stream, None, Response::None, "LIST (\\HasNoChildren \\Sent) \"/\" Sent\r\n".into())?;
-                    write(&stream, None, Response::None, "LIST (\\Marked \\HasNoChildren \\Trash) \"/\" Deleted\r\n".into())?;
-                    write(&stream, tag, Response::Ok, "LIST completed.\r\n".into())?;
+                    stream.write(None, Response::None, "LIST (\\Marked \\HasNoChildren) \"/\" Inbox\r\n".into())?;
+                    stream.write(None, Response::None, "LIST (\\HasNoChildren \\Drafts) \"/\" Drafts\r\n".into())?;
+                    stream.write(None, Response::None, "LIST (\\HasNoChildren \\Sent) \"/\" Sent\r\n".into())?;
+                    stream.write(None, Response::None, "LIST (\\Marked \\HasNoChildren \\Trash) \"/\" Deleted\r\n".into())?;
+                    stream.write(tag, Response::Ok, "LIST completed.\r\n".into())?;
                 }else{
                     todo!();
                 }
             }
             Command::Select => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                write(&stream, None, Response::None, format!("{} EXISTS\r\n", session.mail_count))?; // Number of mail items
-                write(&stream, None, Response::None, format!("{} RECENT\r\n", session.mail_count))?; // Number of unread
-                write(&stream, None, Response::None, "FLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)\r\n".into())?;
-                write(&stream, None, Response::Ok, "[PERMANENTFLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)] Permanent flags\r\n".into())?;
-                write(&stream, None, Response::Ok, "[UIDVALIDITY 0]\r\n".into())?;
-                write(&stream, None, Response::Ok, format!("[UIDNEXT {}] The next unique identifier value\r\n", session.mail_count))?;
-                write(&stream, tag, Response::Ok, "[READ-WRITE] SELECT completed.\r\n".into())?;
+                stream.write(None, Response::None, format!("{} EXISTS\r\n", session.mail_count))?; // Number of mail items
+                stream.write(None, Response::None, format!("{} RECENT\r\n", session.mail_count))?; // Number of unread
+                stream.write(None, Response::None, "FLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)\r\n".into())?;
+                stream.write(None, Response::Ok, "[PERMANENTFLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)] Permanent flags\r\n".into())?;
+                stream.write(None, Response::Ok, "[UIDVALIDITY 0]\r\n".into())?;
+                stream.write(None, Response::Ok, format!("[UIDNEXT {}] The next unique identifier value\r\n", session.mail_count))?;
+                stream.write(tag, Response::Ok, "[READ-WRITE] SELECT completed.\r\n".into())?;
             }
             Command::Status => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                write(&stream, None, Response::None, 
+                stream.write(None, Response::None, 
                     format!("STATUS Inbox (UNSEEN 1 MESSAGES {} RECENT 1 UIDNEXT {} UIDVALIDITY 999)\r\n", session.mail_count, session.mail_count+1))?;
-                write(&stream, tag, Response::Ok, "STATUS completed.\r\n".into())?;
+                stream.write(tag, Response::Ok, "STATUS completed.\r\n".into())?;
             }
             Command::Fetch => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                write(&stream, None, Response::None, "1 FETCH (UID 1)\r\n".into())?;
-                write(&stream, tag, Response::Ok, "FETCH completed\r\n".into())?;
+                stream.write(None, Response::None, "1 FETCH (UID 1)\r\n".into())?;
+                stream.write(tag, Response::Ok, "FETCH completed\r\n".into())?;
             }
             Command::Create => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                write(&stream, tag, Response::Ok, "Create completed\r\n".into())?;
+                stream.write(tag, Response::Ok, "Create completed\r\n".into())?;
             }
             Command::Uid => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
                 let cmd = msg.split(" ").nth(0).unwrap();
                 match cmd {
                     "SEARCH" => {
-                        write(&stream, None, Response::None, "SEARCH 1\r\n".into())?;
-                        write(&stream, tag, Response::Ok, "Search completed\r\n".into())?;
+                        stream.write(None, Response::None, "SEARCH 1\r\n".into())?;
+                        stream.write(tag, Response::Ok, "Search completed\r\n".into())?;
                     }
                     "FETCH" => {
                         // This is what the client intially asks for
                         if msg.contains("FLAGS") {
                             let res = fetch_info(msg).unwrap();
-                            write(&stream, None, Response::None, res)?;
-                            write(&stream, tag, Response::Ok, "FETCH completed.\r\n".into())?;
+                            stream.write(None, Response::None, res)?;
+                            stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;
                         // Client asking for full message
                         }else if msg.contains("BODY.PEEK[]"){
                             let res = fetch_all(msg).unwrap();
-                            write(&stream, None, Response::None, res)?;
-                            write(&stream, tag, Response::Ok, "FETCH completed.\r\n".into())?;  
+                            stream.write(None, Response::None, res)?;
+                            stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;  
                         // Hack needs investigated
                         }else{
-                            write(&stream, None, Response::None, "1 FETCH (UID 1 FLAGS (\\Recent))\r\n".into())?;
-                            write(&stream, tag, Response::Ok, "FETCH completed.\r\n".into())?;  
+                            stream.write(None, Response::None, "1 FETCH (UID 1 FLAGS (\\Recent))\r\n".into())?;
+                            stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;  
                         }
                     }
                     "COPY" => {
                         match copy(&session, msg) {
-                            Ok(_) => write(&stream, tag, Response::Ok, "COPY Completed\r\n".into())?,
-                            Err(e) => write(&stream, tag, Response::No, "COPY error\r\n".into())?,
+                            Ok(_) => stream.write(tag, Response::Ok, "COPY Completed\r\n".into())?,
+                            Err(e) => stream.write(tag, Response::No, format!("COPY error: {:?}\r\n",e))?,
                         }
                              
                     }
                     _ => {
-                        write(&stream, tag, Response::Ok, "FETCH Completed\r\n".into())?;
+                        stream.write(tag, Response::Ok, "FETCH Completed\r\n".into())?;
                     }
                 }
             }
             Command::Subscribe => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                write(&stream, tag, Response::Ok, "SUBSCRIBE Completed\r\n".into())?;
+                stream.write(tag, Response::Ok, "SUBSCRIBE Completed\r\n".into())?;
             }
             Command::Logout => {
-                write(&stream, None, Response::None, "BYE\r\n".into())?;
-                write(&stream, tag, Response::Ok, "LOGOUT completed.\r\n".into())?;
+                stream.write(None, Response::None, "BYE\r\n".into())?;
+                stream.write(tag, Response::Ok, "LOGOUT completed.\r\n".into())?;
                 break
             }
             _ => { 
                 session.bad_attempts += 1;
                 println!("{:?} found", cmd);
-                write(&stream, tag, Response::Bad, format!("Command Unrecognised, Attempts Remaining: {}\r\n", (MAX_BAD_ATTEMPTS - session.bad_attempts)))?;
+                stream.write(tag, Response::Bad, format!("Command Unrecognised, Attempts Remaining: {}\r\n", (MAX_BAD_ATTEMPTS - session.bad_attempts)))?;
                 if session.bad_attempts > 3 { 
-                    let _ = &stream.shutdown(std::net::Shutdown::Both);
+                    let _ = stream.shutdown();
                     break;
                 }
             }
@@ -291,48 +239,6 @@ fn imap_main(stream: TcpStream) -> Result<()> {
     Ok(())
 }
 
-/// This function reads a TCP stream until a CLRF `[13, 10]` is sent then collects into a [Vec]
-fn read<T>(stream: T) -> Result<String> where T: std::io::Read {
-    
-    let mut reader = BufReader::new(stream);
-    let mut data: Vec<u8> = vec![];
-
-    loop{
-        let buffer = reader.fill_buf();      
-        match buffer {
-            Ok(bytes) => {
-                let length = bytes.len();
-                data.extend_from_slice(bytes); 
-                reader.consume(length);
-                // Okay checks for CLFR if more than one byte is in buffer
-                if (data.len() > 1) && (&data[data.len()-2..] == [13, 10]){
-                    break;
-                }
-            },
-            _ => {}
-        }      
-    }
-    //println!("Data from client: {:?}", data);
-    let res = String::from_utf8_lossy(&data);
-    print!("C: {}", res);
-    Ok(res.to_string())
-}
-
-fn write(mut stream: &TcpStream, tag: Option<String>, response: Response, msg: String) -> Result<()> {
-
-    let tag = tag.unwrap_or("*".to_owned());
-    let mut res: String;
-    if response == Response::None{
-        res = format!("{} {}", tag, msg);
-    }else{
-        res = format!("{} {} {}", tag, response, msg);
-    }
-    print!("S: {}", res);
-    //print!("{:?}", res.as_bytes());
-    stream.write(res.as_bytes()).map_err(Error::IO)?;
-
-    Ok(())
-}
 
 fn copy(session: &UserSession, msg: String) -> Result<()>{
     Err(Error::IMAPCopyErr)

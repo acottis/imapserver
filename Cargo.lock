@@ -12,6 +12,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "aml"
+version = "0.1.0"
+source = "git+https://github.com/acottis/aml#87c493045fc903a7bb88c045208a647defe7347c"
+
+[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -94,6 +99,7 @@ dependencies = [
 name = "imapserver"
 version = "0.1.0"
 dependencies = [
+ "aml",
  "chrono",
  "native-tls",
  "regex",

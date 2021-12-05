@@ -10,4 +10,5 @@ pub enum Error{
     CantReadEmail,
     TimeDate(chrono::ParseError),
     IMAPCopyErr,
+    TCPReadTimeout,
 }
