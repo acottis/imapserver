@@ -13,7 +13,7 @@ use error::{Result, Error};
 mod session;
 use session::{UserSession};
 
-mod parse_email;
+mod email;
 
 #[cfg(test)]
 mod test;
@@ -90,7 +90,7 @@ fn imap_main(stream: TcpStream) -> Result<()> {
                 todo!();
             }
             Command::Login => {
-                session.authenticate(msg.to_owned());
+                session.authenticate(&msg);
                 println!("{:?}", session);
                 if session.authenticated {
                     stream.write(tag, Response::Ok, "LOGIN completed.\r\n".into())?;
@@ -101,19 +101,16 @@ fn imap_main(stream: TcpStream) -> Result<()> {
             }
             Command::List => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                println!("{}", msg);
-                if msg == "\"\" \"\""{
-                    stream.write(None, Response::None, "LIST (\\Noselect \\HasChildren) \"/\" \"\"\r\n".into())?;  
-                    stream.write(tag, Response::Ok, "LIST completed.\r\n".into())?;
-                }else if msg == "\"\" \"*\""{       
-                    stream.write(None, Response::None, "LIST (\\Marked \\HasNoChildren) \"/\" Inbox\r\n".into())?;
-                    stream.write(None, Response::None, "LIST (\\HasNoChildren \\Drafts) \"/\" Drafts\r\n".into())?;
-                    stream.write(None, Response::None, "LIST (\\HasNoChildren \\Sent) \"/\" Sent\r\n".into())?;
-                    stream.write(None, Response::None, "LIST (\\Marked \\HasNoChildren \\Trash) \"/\" Deleted\r\n".into())?;
-                    stream.write(tag, Response::Ok, "LIST completed.\r\n".into())?;
-                }else{
-                    todo!();
+                let folders = session.list(&msg).unwrap();
+                for folder in folders{
+                    if folder == r#""""#{
+                        stream.write(None, Response::None, format!("LIST (\\Noselect \\HasChildren) \"\" {}\r\n", folder))?;
+                    }else{
+                        stream.write(None, Response::None, format!("LIST (\\Marked \\HasNoChildren) \"\" {}\r\n", folder))?;
+                    }
                 }
+                stream.write(tag, Response::Ok, "LIST completed.\r\n".into())?;
+              
             }
             Command::Select => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
@@ -122,8 +119,12 @@ fn imap_main(stream: TcpStream) -> Result<()> {
                 stream.write(None, Response::None, "FLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)\r\n".into())?;
                 stream.write(None, Response::Ok, "[PERMANENTFLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)] Permanent flags\r\n".into())?;
                 stream.write(None, Response::Ok, "[UIDVALIDITY 0]\r\n".into())?;
-                stream.write(None, Response::Ok, format!("[UIDNEXT {}] The next unique identifier value\r\n", session.mail_count))?;
+                stream.write(None, Response::Ok, format!("[UNSEEN {}]\r\n", session.mail_count))?;
+                //stream.write(None, Response::Ok, format!("[UIDNEXT {}] The next unique identifier value\r\n", session.mail_count))?;
                 stream.write(tag, Response::Ok, "[READ-WRITE] SELECT completed.\r\n".into())?;
+            }
+            Command::Lsub => {
+                stream.write(tag, Response::Ok, "LSUB completed.\r\n".into())?;
             }
             Command::Status => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
@@ -133,38 +134,69 @@ fn imap_main(stream: TcpStream) -> Result<()> {
             }
             Command::Fetch => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                stream.write(None, Response::None, "1 FETCH (UID 1)\r\n".into())?;
-                stream.write(tag, Response::Ok, "FETCH completed\r\n".into())?;
+                // Client asking for full message
+                let responses = session.fetch_seq(&msg).unwrap();
+                for response in responses{
+                    todo!();
+                    stream.write(None, Response::None, "".into())?;
+                }
+                stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?; 
+                // // Wants a UID lookup
+                // if msg.contains("(UID)"){
+                //     let seq = &msg.split(" ").next().unwrap();
+                //     let res = session.get_uid(seq.parse().unwrap()).unwrap();
+                //     stream.write(None, Response::None, format!("{} FETCH (UID {})\r\n", seq, res))?;
+                // }
+                // else if msg.contains("BODY.PEEK[]"){
+                //     let res = session.fetch_all(&msg).unwrap();
+                //     stream.write(None, Response::None, res)?;
+                // // Hack needs investigated
+                // }else{
+                //     let emails = session.fetch_info_from_seq(&msg).unwrap();
+                //     for email in emails{
+                //         stream.write(None, Response::None, email)?;
+                //     }
+                // }
+                // stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;  
             }
             Command::Create => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                stream.write(tag, Response::Ok, "Create completed\r\n".into())?;
+                stream.write(tag, Response::No, "Not implemented\r\n".into())?;
             }
             Command::Uid => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                let cmd = msg.split(" ").nth(0).unwrap();
+                let mut split = msg.splitn(2, " ");
+                let cmd = split.next().unwrap();
+                let msg = split.next().unwrap();
                 match cmd {
                     "SEARCH" => {
                         stream.write(None, Response::None, "SEARCH 1\r\n".into())?;
                         stream.write(tag, Response::Ok, "Search completed\r\n".into())?;
                     }
-                    "FETCH" => {
-                        // This is what the client intially asks for
-                        if msg.contains("FLAGS") {
-                            let res = session.fetch_info(msg).unwrap();
-                            stream.write(None, Response::None, res)?;
-                            stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;
-                        // Client asking for full message
-                        }else if msg.contains("BODY.PEEK[]"){
-                            let res = session.fetch_all(msg).unwrap();
-                            stream.write(None, Response::None, res)?;
-                            stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;  
-                        // Hack needs investigated
-                        }else{
-                            stream.write(None, Response::None, "1 FETCH (UID 1 FLAGS (\\Recent))\r\n".into())?;
-                            stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;  
-                        }
-                    }
+                    "FETCH" => { todo!();},
+                    // "FETCH" => {
+                    //     // This is what the client intially asks for
+                    //     if msg.contains("(UID FLAGS)") {
+                    //         let emails = session.fetch_info_from_seq(&msg).unwrap();
+                    //         for email in emails{
+                    //             stream.write(None, Response::None, email)?;
+                    //         }
+                    //         stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;
+                    //     // Client asking for full message
+                    //     }else if msg.contains("BODY.PEEK[]"){
+                    //         let res = session.fetch_all(msg).unwrap();
+                    //         stream.write(None, Response::None, res)?;
+                    //         stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;  
+                    //     // Hack needs investigated
+                    //     }else if msg.contains(","){
+                    //         let uids = session.get_uids_from_fetch(msg).unwrap();
+                    //         let infos = session.fetch_info_from_uid(uids).unwrap(); 
+                    //         for info in infos{
+                    //             stream.write(None, Response::None, info)?;
+                    //         }
+                    //         stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?;  
+                    //     }
+                    // }
                     "COPY" => {
                         match session.copy(msg) {
                             Ok(_) => stream.write(tag, Response::Ok, "COPY Completed\r\n".into())?,
