@@ -114,13 +114,21 @@ fn imap_main(stream: TcpStream) -> Result<()> {
             }
             Command::Select => {
                 if !session.authenticated { println!("Not Authenticated yet"); continue }
-                stream.write(None, Response::None, format!("{} EXISTS\r\n", session.mail_count))?; // Number of mail items
-                stream.write(None, Response::None, format!("{} RECENT\r\n", session.mail_count))?; // Number of unread
-                stream.write(None, Response::None, "FLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)\r\n".into())?;
-                stream.write(None, Response::Ok, "[PERMANENTFLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)] Permanent flags\r\n".into())?;
-                stream.write(None, Response::Ok, "[UIDVALIDITY 0]\r\n".into())?;
-                stream.write(None, Response::Ok, format!("[UNSEEN {}]\r\n", session.mail_count))?;
-                //stream.write(None, Response::Ok, format!("[UIDNEXT {}] The next unique identifier value\r\n", session.mail_count))?;
+                let mailbox = msg.split(" ").last().unwrap().to_uppercase().replace("\"", "");
+                println!("{}", mailbox);
+                match mailbox.as_str() {
+                    "INBOX" => {
+                        stream.write(None, Response::None, format!("{} EXISTS\r\n", session.mail_count))?; // Number of mail items
+                        stream.write(None, Response::None, format!("{} RECENT\r\n", session.mail_count))?; // Number of unread
+                        //stream.write(None, Response::None, format!("{} RECENT\r\n", "0"))?; // Number of unread
+                        stream.write(None, Response::None, "FLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)\r\n".into())?;
+                        stream.write(None, Response::Ok, "[PERMANENTFLAGS (\\Seen \\Answered \\Flagged \\Deleted \\Draft)] Permanent flags\r\n".into())?;
+                        stream.write(None, Response::Ok, "[UIDVALIDITY 0]\r\n".into())?;
+                        stream.write(None, Response::Ok, format!("[UNSEEN {}]\r\n", session.mail_count))?;
+                        //stream.write(None, Response::Ok, format!("[UIDNEXT {}] The next unique identifier value\r\n", session.mail_count))?;
+                    }
+                    _=>{}
+                }
                 stream.write(tag, Response::Ok, "[READ-WRITE] SELECT completed.\r\n".into())?;
             }
             Command::Lsub => {
@@ -169,10 +177,21 @@ fn imap_main(stream: TcpStream) -> Result<()> {
                 let msg = split.next().unwrap();
                 match cmd {
                     "SEARCH" => {
-                        stream.write(None, Response::None, "SEARCH 1\r\n".into())?;
+                        let uids = session.search(&msg).unwrap();
+                        let mut uid_string = String::new();
+                        for uid in uids{
+                            uid_string.push_str(&(uid.to_owned()+" "));
+                        }
+                        stream.write(None, Response::None, format!("SEARCH {}\r\n", uid_string))?;
                         stream.write(tag, Response::Ok, "Search completed\r\n".into())?;
                     }
-                    "FETCH" => { todo!();},
+                    "FETCH" => { 
+                        let responses = session.fetch_uid(&msg).unwrap();
+                        for response in responses{
+                            stream.write(None, Response::None, response)?;
+                        }
+                        stream.write(tag, Response::Ok, "FETCH completed.\r\n".into())?; 
+                    },
                     // "FETCH" => {
                     //     // This is what the client intially asks for
                     //     if msg.contains("(UID FLAGS)") {

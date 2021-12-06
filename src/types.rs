@@ -61,3 +61,40 @@ impl From<String> for Command{
         }   
     }
 }
+
+pub enum Month{
+    Jan = 1,
+    Feb = 2,
+    Mar = 3,
+    Apr = 4,
+    May = 5,
+    Jun = 6,
+    Jul = 7,
+    Aug = 8,
+    Sep = 9,
+    Oct = 10,
+    Nov = 11,
+    Dec = 12,
+}
+
+impl TryFrom<&str> for Month{
+    type Error = crate::Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error>{
+        Ok(match s {
+            "Jan" => Month::Jan,
+            "Feb" => Month::Feb,
+            "Mar" => Month::Mar,
+            "Apr" => Month::Apr,
+            "May" => Month::May,
+            "Jun" => Month::Jun,
+            "Jul" => Month::Jul,
+            "Aug" => Month::Aug,
+            "Sep" => Month::Sep,
+            "Oct" => Month::Oct,
+            "Nov" => Month::Nov,
+            "Dec" => Month::Dec,
+            _ => return Err(crate::Error::NotAMonth)
+        })
+    }
+}

@@ -1,5 +1,6 @@
 use crate::error::{Result, Error};
 use crate::email::Email;
+use chrono::prelude::{Utc, TimeZone};
 use std::fs;
 
 static MAIL_ROOT: &'static str = "D:/MAILSERVER";
@@ -76,6 +77,82 @@ impl UserSession{
             }
         }
         Ok(folders)
+    }
+    /// Search UID
+    /// 
+    pub fn search(&self, msg: &str) -> Result<Vec<String>>{
+        let date = msg.rsplitn(2," ").next().unwrap();
+
+        let mut split_date = date.split("-");
+        let day = split_date.next().unwrap();
+        let month: crate::types::Month = split_date.next().unwrap().try_into().unwrap();
+        let year = split_date.next().unwrap();
+        let email_timestamp = Utc.ymd(year.parse().unwrap(), month as u32, day.parse().unwrap()).and_hms(0, 0, 0).timestamp();
+
+        let path = format!("{}/mail/{}/Inbox", MAIL_ROOT, self.username.as_ref().unwrap());
+        let dir = fs::read_dir(path).unwrap();
+
+        let search_results: Vec<_> = dir.into_iter().filter(|f| {
+            let file_date: f64 = f.as_ref().unwrap().file_name().into_string().unwrap().split("s.eml").next().unwrap().parse().unwrap();
+            //println!("File_date: {}, Email_timestamp: {}", file_date, email_timestamp);
+            file_date > email_timestamp as f64
+        }).collect();
+
+        let uids: Vec<_> = search_results.into_iter().map(| f |{
+            self.filename_to_uid(f.as_ref().unwrap())
+        }).collect();
+
+        Ok(uids)
+    }
+    /// Fetch UID
+    /// 
+    pub fn fetch_uid(&self, msg: &str) -> Result<Vec<String>>{
+        // Holding Vector for result
+        let mut emails: Vec<Email> = Vec::new();
+        let mut responses: Vec<String> = Vec::new();
+        let mut fetch_all = false;
+
+        // Split it into two parts, sequence number(s) and args
+        let mut split = msg.splitn(2, " ");
+        let uid = split.next().unwrap();
+        let args = split.next().unwrap();
+
+        // Get the files in the Inbox
+        let path = format!("{}/mail/{}/Inbox", MAIL_ROOT, self.username.as_ref().unwrap());
+        let dir = fs::read_dir(path).unwrap();
+
+        // Get the UID list
+        let mut uids: Vec<String> = Vec::new(); 
+
+        if uid.contains(",") {
+            let mut uid_list = uid.split(",");
+            while let Some(uid) = uid_list.next(){ 
+                uids.push(uid.into());
+            }
+        }else if uid.contains(":"){
+            fetch_all = true;
+        }
+        else{
+            // Lookup one thing
+            uids.push(uid.into());
+        }
+        
+        for (index, file) in dir.enumerate(){
+            let file_uid = self.filename_to_uid(file.as_ref().unwrap());
+            if fetch_all == true{
+                emails.push(Email::new(&file_uid, &index.to_string(), file.as_ref().unwrap().path()).unwrap());
+            }
+            else if uids.contains(&file_uid){
+                emails.push(Email::new(&file_uid, &index.to_string(), file.as_ref().unwrap().path()).unwrap());
+            }
+        }
+
+        // Format the emails
+        for email in emails{
+            responses.push(email.format_response(args))
+        }
+        // Parse Args
+        Ok(responses)
     }
     /// Fetch (Non UID version)
     /// 
@@ -166,7 +243,7 @@ impl UserSession{
     /// Converts a DirEnty to its UID using the filename which is based on date
     fn filename_to_uid(&self, file: &fs::DirEntry) -> String{
         let mut filename = file.file_name().into_string().unwrap();
-        let shorter_filename = filename.split_off(1);
+        let shorter_filename = filename.split_off(3);
         let uid_seed = shorter_filename.split("s.eml").next().unwrap().parse::<f64>().unwrap();
         ((uid_seed * 10f64) as usize).to_string()
     }
@@ -194,6 +271,22 @@ fn fetch_seq_list(){
     session.authenticate("\"test@ashdown.scot\" tset");
     
     let res = session.fetch_seq("1,2,4,5 (UID)").unwrap();
+    println!("{:#?}", res);
+}
+#[test]
+fn fetch_uid_single(){
+    let mut session = UserSession::new();
+    session.authenticate("\"test@ashdown.scot\" tset");
+    
+    let res = session.fetch_uid("87142369,87142369 (UID FLAGS RFC822.SIZE BODY.PEEK[] INTERNALDATE)").unwrap();
+    println!("{:#?}", res);
+}
+#[test]
+fn search(){
+    let mut session = UserSession::new();
+    session.authenticate("\"test@ashdown.scot\" tset");
+    
+    let res = session.search("SINCE 04-Dec-2021").unwrap();
     println!("{:#?}", res);
 }
 // #[test]

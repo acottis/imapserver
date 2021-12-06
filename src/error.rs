@@ -11,4 +11,5 @@ pub enum Error{
     TimeDate(chrono::ParseError),
     IMAPCopyErr,
     TCPReadTimeout,
+    NotAMonth,
 }
