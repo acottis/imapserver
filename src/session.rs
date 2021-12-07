@@ -50,15 +50,16 @@ impl UserSession{
     /// 
     pub fn list(&self, msg: &str) -> Result<Vec<String>>{
         let folders = self.get_folders().unwrap();
-        let arg = msg.rsplit(r#" "#).next().unwrap().replace("\"", "");
+        let arg = msg.rsplit(r#" "#).next().unwrap().replace("\"", "").to_uppercase();
         if folders.contains(&arg){
             return Ok(vec![arg])
         }
-        if arg == ""{
-            return Ok(vec![r#""""#.into()])
-        }
-        else{
-            return Ok(folders)
+        match arg.as_str() {
+            ""      => return Ok(vec![r#""""#.into()]),
+            "%/%"   => return Ok(vec![r#""""#.into()]),
+            "%"     => return Ok(folders),
+            "*"     => return Ok(folders),
+            _       => return Ok(Vec::new()),
         }
     }
     ///Gets all folders and puts them into array
@@ -69,6 +70,7 @@ impl UserSession{
         let mut dir = fs::read_dir(path).unwrap();
 
         let mut folders: Vec<String> = vec![];
+        
         while let Some(f) = dir.next(){
             let file = f.unwrap();
             if file.metadata().unwrap().is_dir() {
@@ -94,7 +96,6 @@ impl UserSession{
 
         let search_results: Vec<_> = dir.into_iter().filter(|f| {
             let file_date: f64 = f.as_ref().unwrap().file_name().into_string().unwrap().split("s.eml").next().unwrap().parse().unwrap();
-            //println!("File_date: {}, Email_timestamp: {}", file_date, email_timestamp);
             file_date > email_timestamp as f64
         }).collect();
 
@@ -289,235 +290,3 @@ fn search(){
     let res = session.search("SINCE 04-Dec-2021").unwrap();
     println!("{:#?}", res);
 }
-// #[test]
-// fn test_fetch_info_range(){
-//     let mut session = UserSession::new();
-//     session.authenticate("\"test@ashdown.scot\" tset");
-
-//     println!("{:#?}", session.fetch_info_from_seq("3:6 (UID FLAGS)").unwrap());
-// }
-// #[test]
-// fn test_fetch_info_single(){
-//     let mut session = UserSession::new();
-//     session.authenticate("\"test@ashdown.scot\" tset");
-
-//     println!("{:#?}", session.fetch_info_from_seq("1 (UID FLAGS)").unwrap());
-// }
-// #[test]
-// fn test_fetch_all(){
-//     let mut session = UserSession::new();
-//     session.authenticate("\"test@ashdown.scot\" tset");
-
-//     println!("{:#?}", session.fetch_info_from_seq("1 BODY.PEEK[]").unwrap());
-// }
-// #[test]
-// fn test_list(){
-//     let mut session = UserSession::new();
-//     session.authenticate("\"test@ashdown.scot\" tset");
-
-//     assert_eq!(session.list(r#"LIST "" "Inbox""#).unwrap(), vec!["Inbox".to_owned()])
-
-// }
-// #[test]
-// fn test_get_uid(){
-//     let mut session = UserSession::new();
-//     session.authenticate("\"test@ashdown.scot\" tset");
-
-//     println!("{:?}", session.get_uid(9).unwrap());
-//     //assert_eq!(session.get_uid(r#"9 (UID)"#).unwrap(), 2);
-
-// }
-// #[test]
-// fn test_fetch_parse(){
-//     let mut session = UserSession::new();
-//     session.authenticate("\"test@ashdown.scot\" tset");
-//     session.get_uids_from_fetch("7570,8057,399641,448990,943731,946272,963704,970680 (UID FLAGS RFC822.SIZE BODY.PEEK[] INTERNALDATE)").unwrap();
-// }
-// #[test]
-// fn test_fetching_uids(){
-//     let mut session = UserSession::new();
-//     session.authenticate("\"test@ashdown.scot\" tset");
-//     let test = session.get_uids_from_fetch("7570,8057,399641,448990,943731,946272,963704,970680 (UID FLAGS RFC822.SIZE BODY.PEEK[] INTERNALDATE)").unwrap();
-//     println!("{:?}", session.fetch_info_from_uid(test));
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    // pub fn fetch_all(&self, msg: &str) -> Result<String>{
-    //     println!("Message: {}", msg);
-    //     let sequence: usize = msg.splitn(2, " ").next().unwrap().parse().unwrap();
-
-    //     let dir = format!("{}/mail/{}/inbox", MAIL_ROOT, self.username.as_ref().unwrap());
-    //     let email = std::fs::read_dir(dir).unwrap().nth(sequence-1).unwrap().unwrap();
-    //     println!("{:?}", email);
-
-    //     let mut b = vec![];
-    //     let mut f = std::fs::File::open(email.path()).unwrap();
-    //     f.read_to_end(&mut b).unwrap();
-    //     let res = format!("{} FETCH (BODY[] {{{}}}\r\n{}\r\n)\r\n",
-    //         sequence, 
-    //         b.len()+2, 
-    //         String::from_utf8(b).map_err(Error::UTF8)?
-    //     );
-    //     Ok(res)
-    // }
-
-    // pub fn get_uids_from_fetch(&self, msg: &str) -> Result<Vec<String>>{
-    //     // This is what the client intially asks for
-    //     let mut uids: Vec<String> = vec![];
-    //     let uids_string = msg.splitn(2," ").next().unwrap();
-    //     let mut iter = uids_string.split(",");
-    
-    //     while let Some(uid) = iter.next(){
-    //         uids.push(uid.into());
-    //     }
-    //     Ok(uids)
-    // }
-
-    // fn get_uid_from_filename(&self, f: &fs::DirEntry) -> usize{
-    //     let mut file = f.file_name().into_string().unwrap();
-    //     let shorter_filename = file.split_off(6);
-    //     let uid_seed = shorter_filename.split("s.eml").next().unwrap().parse::<f64>().unwrap();
-    //     (uid_seed * 100f64) as usize
-    // }
-
-    // pub fn fetch_info_from_uid(&self, uids: Vec<String>) -> Result<Vec<String>>{
-    //     let mut responses = Vec::new();
-    //     let dir = format!("{}/mail/{}/inbox", MAIL_ROOT, self.username.as_ref().unwrap());
-    //     let files = std::fs::read_dir(dir).unwrap();
-
-    //     for (i, f) in files.enumerate(){
-    //         let i = i+1; // Adjust 0 to 1 index
-    //         let uid = &self.get_uid_from_filename(&f.as_ref().unwrap()).to_string();
-    //         println!("{}", uid);
-    //         if !uids.contains(uid) { continue };
-                        
-
-    //         let path = f.map_err(Error::IO)?.path();
-    //         // println!("{:?}", &path);
-    //         let parser: ParseEmail = ParseEmail::new(&path)?;
-    //         let (to_user, to_domain, to_display_name) = parser.to_header()?;
-    //         let (from_user, from_domain, from_display_name) = parser.from_header()?;
-    //         let date = parser.date_header()?;
-    //         let subject = parser.subject_header()?;
-    //         let internal_date = internal_date(&path)?;
-
-    //         // TODO FIELDS
-    //         //let message_id = "<CADkb2rHmFeg1D01=a=n9xFZ5LxqH5FsWHT_dPxMyK7O4v1EKUA@mail.gmail.com>";
-    //         let message_id = "NIL";
-    //         let data = ""; // This is what the bytes refer to, the new line adds +2 though
-    //         let seq_num = i;
-    //         let uid = self.get_uid(seq_num).unwrap();
-
-    //         let bytes = data.len()+2;
-    //         responses.push(format!(
-    //             "{seq_num} FETCH (UID {uid} FLAGS (\\RECENT) ENVELOPE (\"{date}\" \"{subject}\" \
-    //             ((\"{from_display_name}\" NIL \"{from_user}\" \"{from_domain}\")) NIL NIL ((\"{to_display_name}\" NIL \
-    //             \"{to_user}\" \"{to_domain}\")) NIL NIL NIL {message_id}) INTERNALDATE \"{internal_date}\" \
-    //             BODY[HEADER.FIELDS (References)] {{{bytes}}}\r\n{data}\r\n)\r\n",
-    //             seq_num = seq_num,
-    //             uid = uid,
-    //             date = date,
-    //             subject = subject,
-    //             from_display_name = from_display_name,
-    //             from_user = from_user,
-    //             from_domain = from_domain,
-    //             to_display_name = to_display_name,
-    //             to_user = to_user,
-    //             to_domain = to_domain,
-    //             message_id = message_id,
-    //             internal_date = internal_date,
-    //             bytes = bytes,
-    //             data = data,
-    //         ));
-    //     }
-    //     Ok(responses)
-    // }
-
-
-    // pub fn fetch_info_from_seq(&self, msg: &str) -> Result<Vec<String>>{
-
-    //     let from;
-    //     let to;
-
-    //     let mut responses = Vec::new();
-    //     if msg.contains(":"){
-    //         let mut range = msg.splitn(2," ").next().unwrap().split(":");
-    //         from = range.next().unwrap().parse().unwrap();
-    //         to = range.next().unwrap().parse().unwrap_or(std::usize::MAX);
-    //     }else{
-    //         from = msg.splitn(2, " ").next().unwrap().parse().unwrap();
-    //         to = from;
-    //     }
-
-    //     let dir = format!("{}/mail/{}/inbox", MAIL_ROOT, self.username.as_ref().unwrap());
-    //     let files = std::fs::read_dir(dir).unwrap();
-
-    //     for (i, f) in files.enumerate(){
-    //         let i = i+1; // Adjust 0 to 1 index
-    //         if i < from { continue };
-    //         if i > to { break };
-
-    //         let path = f.map_err(Error::IO)?.path();
-    //         // println!("{:?}", &path);
-    //         let parser: ParseEmail = ParseEmail::new(&path)?;
-    //         let (to_user, to_domain, to_display_name) = parser.to_header()?;
-    //         let (from_user, from_domain, from_display_name) = parser.from_header()?;
-    //         let date = parser.date_header()?;
-    //         let subject = parser.subject_header()?;
-    //         let internal_date = internal_date(&path)?;
-
-    //         // TODO FIELDS
-    //         //let message_id = "<CADkb2rHmFeg1D01=a=n9xFZ5LxqH5FsWHT_dPxMyK7O4v1EKUA@mail.gmail.com>";
-    //         let message_id = "NIL";
-    //         let data = ""; // This is what the bytes refer to, the new line adds +2 though
-    //         let seq_num = i;
-    //         let uid = self.get_uid(seq_num).unwrap();
-
-    //         let bytes = data.len()+2;
-    //         responses.push(format!(
-    //             "{seq_num} FETCH (UID {uid} FLAGS (\\RECENT) ENVELOPE (\"{date}\" \"{subject}\" \
-    //             ((\"{from_display_name}\" NIL \"{from_user}\" \"{from_domain}\")) NIL NIL ((\"{to_display_name}\" NIL \
-    //             \"{to_user}\" \"{to_domain}\")) NIL NIL NIL {message_id}) INTERNALDATE \"{internal_date}\" \
-    //             BODY[HEADER.FIELDS (References)] {{{bytes}}}\r\n{data}\r\n)\r\n",
-    //             seq_num = seq_num,
-    //             uid = uid,
-    //             date = date,
-    //             subject = subject,
-    //             from_display_name = from_display_name,
-    //             from_user = from_user,
-    //             from_domain = from_domain,
-    //             to_display_name = to_display_name,
-    //             to_user = to_user,
-    //             to_domain = to_domain,
-    //             message_id = message_id,
-    //             internal_date = internal_date,
-    //             bytes = bytes,
-    //             data = data,
-    //         ));
-    //     }
-    //     Ok(responses)
-    // }
-
-    // /// Dont @ me, it works
-    // pub fn get_uid(&self, seq: usize) -> Result<usize>{
-
-    //     let path = format!("{}/mail/{}", MAIL_ROOT, self.username.as_ref().unwrap());
-    //     let file = fs::read_dir(path).unwrap().nth(seq-1).unwrap();
-    //     let mut filename = file.unwrap().file_name().into_string().unwrap();
-    //     let shorter_filename = filename.split_off(6);
-    //     let uid_seed = shorter_filename.split("s.eml").next().unwrap().parse::<f64>().unwrap();
-    //     let uid = uid_seed * 100f64;
-    //     Ok(uid as usize)
-    // }

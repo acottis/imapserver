@@ -112,93 +112,65 @@ impl Email{
                 self.fetch_uid_flags_RFC822_bodypeek().unwrap()
             },
 
-            "(UID FLAGS)" => { self.fetch_flags().unwrap() },
+            "(UID FLAGS)" => { self.fetch_uid_flags().unwrap() },
             _ => {todo!()}
         }
     }
 
-    pub fn fetch_flags(&self) -> Result<String>{
-        let (to_user, to_domain, to_display_name) = self.to_header()?;
-        let (from_user, from_domain, from_display_name) = self.from_header()?;
-        let date = self.date_header()?;
-        let subject = self.subject_header()?;
-        let internal_date = self.internal_date()?;
-
-        // TODO FIELDS
-        //let message_id = "<CADkb2rHmFeg1D01=a=n9xFZ5LxqH5FsWHT_dPxMyK7O4v1EKUA@mail.gmail.com>";
-        let message_id = "NIL";
+    pub fn fetch_uid_flags(&self) -> Result<String>{
         let data = ""; // This is what the bytes refer to, the new line adds +2 though
         let seq_num = &self.seq;
         let uid = &self.uid;
 
         let bytes = data.len()+2;
         Ok(format!(
-            "{seq_num} FETCH (UID {uid} FLAGS (\\RECENT) ENVELOPE (\"{date}\" \"{subject}\" \
-            ((\"{from_display_name}\" NIL \"{from_user}\" \"{from_domain}\")) NIL NIL ((\"{to_display_name}\" NIL \
-            \"{to_user}\" \"{to_domain}\")) NIL NIL NIL {message_id})\r\n",
+            "{seq_num} FETCH (UID {uid} FLAGS (\\Seen))\r\n",
             seq_num = seq_num,
             uid = uid,
-            date = date,
-            subject = subject,
-            from_display_name = from_display_name,
-            from_user = from_user,
-            from_domain = from_domain,
-            to_display_name = to_display_name,
-            to_user = to_user,
-            to_domain = to_domain,
-            message_id = message_id,
         ))
 
     }
 
-    pub fn fetch_info(&self) -> Result<String>{
-        let (to_user, to_domain, to_display_name) = self.to_header()?;
-        let (from_user, from_domain, from_display_name) = self.from_header()?;
-        let date = self.date_header()?;
-        let subject = self.subject_header()?;
-        let internal_date = self.internal_date()?;
+    // pub fn fetch_info(&self) -> Result<String>{
+    //     let (to_user, to_domain, to_display_name) = self.to_header()?;
+    //     let (from_user, from_domain, from_display_name) = self.from_header()?;
+    //     let date = self.date_header()?;
+    //     let subject = self.subject_header()?;
+    //     let internal_date = self.internal_date()?;
 
-        // TODO FIELDS
-        //let message_id = "<CADkb2rHmFeg1D01=a=n9xFZ5LxqH5FsWHT_dPxMyK7O4v1EKUA@mail.gmail.com>";
-        let message_id = "NIL";
-        let data = ""; // This is what the bytes refer to, the new line adds +2 though
-        let seq_num = &self.seq;
-        let uid = &self.uid;
+    //     // TODO FIELDS
+    //     //let message_id = "<CADkb2rHmFeg1D01=a=n9xFZ5LxqH5FsWHT_dPxMyK7O4v1EKUA@mail.gmail.com>";
+    //     let message_id = "NIL";
+    //     let data = ""; // This is what the bytes refer to, the new line adds +2 though
+    //     let seq_num = &self.seq;
+    //     let uid = &self.uid;
 
-        let bytes = data.len()+2;
-        Ok(format!(
-            "{seq_num} FETCH (UID {uid} FLAGS (\\RECENT) ENVELOPE (\"{date}\" \"{subject}\" \
-            ((\"{from_display_name}\" NIL \"{from_user}\" \"{from_domain}\")) NIL NIL ((\"{to_display_name}\" NIL \
-            \"{to_user}\" \"{to_domain}\")) NIL NIL NIL {message_id}) INTERNALDATE \"{internal_date}\" \
-            BODY[HEADER.FIELDS (References)] {{{bytes}}}\r\n{data}\r\n)\r\n",
-            seq_num = seq_num,
-            uid = uid,
-            date = date,
-            subject = subject,
-            from_display_name = from_display_name,
-            from_user = from_user,
-            from_domain = from_domain,
-            to_display_name = to_display_name,
-            to_user = to_user,
-            to_domain = to_domain,
-            message_id = message_id,
-            internal_date = internal_date,
-            bytes = bytes,
-            data = data,
-        ))
-    }
+    //     let bytes = data.len()+2;
+    //     Ok(format!(
+    //         "{seq_num} FETCH (UID {uid} FLAGS (\\RECENT) ENVELOPE (\"{date}\" \"{subject}\" \
+    //         ((\"{from_display_name}\" NIL \"{from_user}\" \"{from_domain}\")) NIL NIL ((\"{to_display_name}\" NIL \
+    //         \"{to_user}\" \"{to_domain}\")) NIL NIL NIL {message_id}) INTERNALDATE \"{internal_date}\" \
+    //         BODY[HEADER.FIELDS (References)] {{{bytes}}}\r\n{data}\r\n)\r\n",
+    //         seq_num = seq_num,
+    //         uid = uid,
+    //         date = date,
+    //         subject = subject,
+    //         from_display_name = from_display_name,
+    //         from_user = from_user,
+    //         from_domain = from_domain,
+    //         to_display_name = to_display_name,
+    //         to_user = to_user,
+    //         to_domain = to_domain,
+    //         message_id = message_id,
+    //         internal_date = internal_date,
+    //         bytes = bytes,
+    //         data = data,
+    //     ))
+    // }
 
     // (UID FLAGS RFC822.SIZE BODY.PEEK[] INTERNALDATE)
     pub fn fetch_uid_flags_RFC822_bodypeek(&self) -> Result<String>{
-        let (to_user, to_domain, to_display_name) = self.to_header()?;
-        let (from_user, from_domain, from_display_name) = self.from_header()?;
-        let date = self.date_header()?;
-        let subject = self.subject_header()?;
         let internal_date = self.internal_date()?;
-
-        // TODO FIELDS
-        //let message_id = "<CADkb2rHmFeg1D01=a=n9xFZ5LxqH5FsWHT_dPxMyK7O4v1EKUA@mail.gmail.com>";
-        let message_id = "NIL";
         let data = &self.email_contents; // This is what the bytes refer to, the new line adds +2 though
         let seq_num = &self.seq;
         let uid = &self.uid;
@@ -213,31 +185,8 @@ impl Email{
             bytes = bytes,
             data = data,
         ))
-
-
-
-
-
-        // println!("Message: {}", msg);
-        // let sequence: usize = msg.splitn(2, " ").next().unwrap().parse().unwrap();
-
-        // let dir = format!("{}/mail/{}/inbox", MAIL_ROOT, self.username.as_ref().unwrap());
-        // let email = std::fs::read_dir(dir).unwrap().nth(sequence-1).unwrap().unwrap();
-        // println!("{:?}", email);
-
-        // let mut b = vec![];
-        // let mut f = std::fs::File::open(email.path()).unwrap();
-        // f.read_to_end(&mut b).unwrap();
-        // let res = format!("{} FETCH (BODY[] {{{}}}\r\n{}\r\n)\r\n",
-        //     sequence, 
-        //     b.len()+2, 
-        //     String::from_utf8(b).map_err(Error::UTF8)?
-        // );
-        // Ok(res)
     }
-
 }
-
 
 #[test]
 fn test_internal_date(){
@@ -245,5 +194,3 @@ fn test_internal_date(){
     let date = email.internal_date().unwrap();
     assert_eq!(date, "2021-Nov-23 11:26:52 +0000");
 }
-
-
