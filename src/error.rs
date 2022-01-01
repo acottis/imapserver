@@ -12,4 +12,5 @@ pub enum Error{
     IMAPCopyErr,
     TCPReadTimeout,
     NotAMonth,
+    ToFieldMissing,
 }

@@ -38,11 +38,14 @@ impl Email{
     /// 
     pub fn to_header(&self) -> Result<(String, String, String)> {
 
-        let to = Regex::new(r"(?mi)^TO:.*").unwrap();
+        let to = Regex::new(r"(?mi)^TO: (.*)\r").unwrap();
 
-        let find_to = to.find(&self.email_contents);
-        let line = find_to.map_or("", |m| m.as_str()).replace(&['<','>','\r'][..], "");
-        let mut split = line.splitn(2, " ").last().unwrap().rsplitn(2, " "); // Remove To: and split email and displayname 
+        let find_to = to.captures(&self.email_contents)
+            .ok_or(Error::ToFieldMissing)?;
+        let line = find_to.get(1).ok_or(Error::ToFieldMissing)?
+            .as_str().replace(&['<','>'][..], "");
+
+        let mut split = line.rsplitn(2, " "); // Remove To: and split email and displayname 
 
         let mut tmp = split.next().unwrap().split("@"); // Splits email address into user and domain
         let to_user = tmp.next().unwrap().to_owned();
@@ -193,4 +196,23 @@ fn test_internal_date(){
     let email = Email::new("1", "1", "test_emails/NoDisplayNames.eml").unwrap();
     let date = email.internal_date().unwrap();
     assert_eq!(date, "2021-Nov-23 11:26:52 +0000");
+}
+
+#[test]
+fn test_to_header_displayname(){
+    let email = Email::new("1", "1", "test_emails/DisplayNames.eml").unwrap();
+    let (user,domain,display_name) = email.to_header().expect("Failed to Header");
+
+    assert_eq!(user, "adam.test");
+    assert_eq!(domain, "example.scot");
+    assert_eq!(display_name, "Adam Test");
+}
+#[test]
+fn test_to_header_no_displayname(){
+    let email = Email::new("1", "1", "test_emails/NoDisplayNames.eml").unwrap();
+    let (user,domain,display_name) = email.to_header().expect("Failed to Header");
+
+    assert_eq!(user, "adam.test");
+    assert_eq!(domain, "example.scot");
+    assert_eq!(display_name, "NIL");
 }
